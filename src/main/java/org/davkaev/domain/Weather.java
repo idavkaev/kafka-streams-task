@@ -1,6 +1,6 @@
 package org.davkaev.domain;
 
-import lombok.*;
+import lombok.Data;
 
 @Data
 public class Weather {

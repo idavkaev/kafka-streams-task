@@ -7,7 +7,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 
 import java.util.Map;
 
-public class WeatherDeserializer<T> implements Deserializer<T> {
+public class PojoDeserializer<T> implements Deserializer<T> {
     private ObjectMapper objectMapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private Class<T> tClass;
@@ -15,7 +15,7 @@ public class WeatherDeserializer<T> implements Deserializer<T> {
     /**
      * Default constructor needed by Kafka
      */
-    public WeatherDeserializer() {
+    public PojoDeserializer() {
     }
 
     @SuppressWarnings("unchecked")

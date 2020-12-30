@@ -1,21 +1,19 @@
 package org.davkaev.serdes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.kafka.common.errors.SerializationException;
-import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.common.serialization.Serializer;
 
 import java.util.Map;
 
-public class WeatherSerializer<T> implements Serializer<T> {
+public class PojoSerializer<T> implements Serializer<T> {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Default constructor needed by Kafka
      */
-    public WeatherSerializer() {
+    public PojoSerializer() {
     }
 
     @Override

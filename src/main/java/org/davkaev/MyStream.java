@@ -9,15 +9,22 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.streams.*;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
 import org.davkaev.domain.Address;
 import org.davkaev.domain.Weather;
 import org.davkaev.domain.WeatherAgg;
-import org.davkaev.serdes.WeatherDeserializer;
-import org.davkaev.serdes.WeatherSerializer;
+import org.davkaev.serdes.PojoDeserializer;
+import org.davkaev.serdes.PojoSerializer;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -32,6 +39,11 @@ public class MyStream {
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.ByteArray().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
 
+        final String SOURCE_ADDRESSES_TOPIC = "addresses2";
+        final String SOURCE_WEATHER_TOPIC = "weather_100";
+        final String INTERMEDIATE_WEATHER_TOPIC_HASHDATE = "weather_hash_date";
+        final String INTERMEDIATE_WEATHER_TOPIC_HASH = "weather_hash";
+
         final StreamsBuilder builder = new StreamsBuilder();
 
         ObjectMapper om = new ObjectMapper();
@@ -39,42 +51,40 @@ public class MyStream {
         final Serde<String> stringSerde = Serdes.String();
         final Serde<byte[]> byteArraySerde = Serdes.ByteArray();
 
-
         Map<String, Object> serdeProps = new HashMap<>();
-        final Serializer<Weather> weatherSerializer = new WeatherSerializer<>();
+        final Serializer<Weather> weatherSerializer = new PojoSerializer<>();
         serdeProps.put("JsonPOJOClass", Weather.class);
         weatherSerializer.configure(serdeProps, false);
 
-        final Deserializer<Weather> weatherDeserializer = new WeatherDeserializer<>();
+        final Deserializer<Weather> weatherDeserializer = new PojoDeserializer<>();
         serdeProps.put("JsonPOJOClass", Weather.class);
         weatherDeserializer.configure(serdeProps, false);
         final Serde<Weather> weatherSerde = Serdes.serdeFrom(weatherSerializer, weatherDeserializer);
 
-        final Serializer<WeatherAgg> weatherStatsSerializer = new WeatherSerializer<>();
+        final Serializer<WeatherAgg> weatherStatsSerializer = new PojoSerializer<>();
         serdeProps.put("JsonPOJOClass", WeatherAgg.class);
         weatherStatsSerializer.configure(serdeProps, false);
 
-        final Deserializer<WeatherAgg> weatherStatsDeserializer = new WeatherDeserializer<>();
+        final Deserializer<WeatherAgg> weatherStatsDeserializer = new PojoDeserializer<>();
         serdeProps.put("JsonPOJOClass", WeatherAgg.class);
         weatherStatsDeserializer.configure(serdeProps, false);
         final Serde<WeatherAgg> weatherStatSerde = Serdes.serdeFrom(weatherStatsSerializer, weatherStatsDeserializer);
 
-        final Serializer<Address> addressSerializer = new WeatherSerializer<>();
+        final Serializer<Address> addressSerializer = new PojoSerializer<>();
         serdeProps.put("JsonPOJOClass", Address.class);
         addressSerializer.configure(serdeProps, false);
 
-        final Deserializer<Address> addressDeserializer = new WeatherDeserializer<>();
+        final Deserializer<Address> addressDeserializer = new PojoDeserializer<>();
         serdeProps.put("JsonPOJOClass", Address.class);
         addressDeserializer.configure(serdeProps, false);
         final Serde<Address> addressSerde = Serdes.serdeFrom(addressSerializer, addressDeserializer);
 
-        final KStream<byte[], String> addresses = builder.stream("addresses2", Consumed.with(byteArraySerde, stringSerde));     // source addresses
-        final KStream<String, String> weathers = builder.stream("weather_100", Consumed.with(stringSerde, stringSerde));        // source weather
-        final KStream<String, Weather> w1 = builder.stream("weather_hash_date", Consumed.with(stringSerde, weatherSerde));      // intermediate weather (by hash+date)
-        final KStream<String, Weather> w2 = builder.stream("weather_hash", Consumed.with(stringSerde, weatherSerde));           // intermediate weather (by hash)
-        final KStream<String, WeatherAgg> w3 = builder.stream("weather_100_tr", Consumed.with(stringSerde, weatherStatSerde));  // final weather aggregated
+        final KStream<byte[], String> addresses = builder.stream(SOURCE_ADDRESSES_TOPIC, Consumed.with(byteArraySerde, stringSerde));       // source addresses
+        final KStream<String, String> weathers = builder.stream(SOURCE_WEATHER_TOPIC, Consumed.with(stringSerde, stringSerde));             // source weather
+        final KStream<String, Weather> w1 = builder.stream(INTERMEDIATE_WEATHER_TOPIC_HASHDATE, Consumed.with(stringSerde, weatherSerde));  // intermediate weather (by hash+date)
+        final KStream<String, Weather> w2 = builder.stream(INTERMEDIATE_WEATHER_TOPIC_HASH, Consumed.with(stringSerde, weatherSerde));      // intermediate weather (by hash)
+//        final KStream<String, WeatherAgg> w3 = builder.stream("weather_100_tr", Consumed.with(stringSerde, weatherStatSerde));            // final weather aggregated
         final KTable<String, Address> addressKTable;
-        final KTable<String, WeatherAgg> weatherKTable;
 
         /*
          * Mapping weather by double key (date + hash)
@@ -97,13 +107,12 @@ public class MyStream {
                         e.printStackTrace();
                     }
                     return null;
-                }).to("weather_hash_date", Produced.with(stringSerde, weatherSerde));
+                }).to(INTERMEDIATE_WEATHER_TOPIC_HASHDATE, Produced.with(stringSerde, weatherSerde));
 
         /*
          * Mapping weather by hash
          */
         w1.groupByKey()
-                .windowedBy(TimeWindows.of(Duration.ofMinutes(2)))
                 .aggregate(WeatherAgg::new,
                         (key, value, agg) -> {
                             agg.addWeather(value);
@@ -112,23 +121,24 @@ public class MyStream {
                         Materialized.with(stringSerde, weatherStatSerde))
                 .toStream()
                 .map((s, weatherStat) -> {
-                    String[] keyParts = s.key().split("_");
+                    String[] keyParts = s.split("_");
                     Weather avgWeather = weatherStat.avgTmp();
                     avgWeather.setDate(keyParts[1]);
                     return KeyValue.pair(keyParts[0], avgWeather);
                 })
-                .to("weather_hash", Produced.with(stringSerde, weatherSerde));
+                .to(INTERMEDIATE_WEATHER_TOPIC_HASH, Produced.with(stringSerde, weatherSerde));
 
         /*
          * Aggregating weather
          */
-        weatherKTable = w2.groupByKey()
-                .aggregate(WeatherAgg::new,
-                        (key, value, agg) -> {
-                            agg.addWeather(value);
-                            return agg;
-                        },
-                        Materialized.with(stringSerde, weatherStatSerde));
+//        w2.groupByKey()
+//                .aggregate(
+//                        WeatherAgg::new,
+//                        (key, value, agg) -> {
+//                            agg.addWeather(value);
+//                            return agg;
+//                        },
+//                        Materialized.with(stringSerde, weatherStatSerde))
 //                .toStream()
 //                .to("weather_100_tr", Produced.with(stringSerde, weatherStatSerde));
 
@@ -155,21 +165,30 @@ public class MyStream {
                     return null;
                 }).toTable(Materialized.with(stringSerde, addressSerde));
 
+        addressKTable.leftJoin(w2.toTable(), (address, weather) -> {
+            if (weather != null) {
+                address.addWeather(weather);
+            }
+            return address;
+        })
+                .toStream()
+                .to("aw", Produced.with(stringSerde, addressSerde));
+
         /*
          * joining addresses and weather
          */
-        addressKTable
-                .leftJoin(weatherKTable, (address, weather) -> {
-                    System.out.println("A: " + address);
-                    System.out.println("W: " + weather);
-
-                    if (weather != null) {
-                        address.addWeather(weather.getWeatherList());
-                    }
-                    return address;
-                })
-                .toStream()
-                .to("aw", Produced.with(stringSerde, addressSerde));
+//        addressKTable
+//                .leftJoin(weatherKTable, (address, weather) -> {
+//                    System.out.println("A: " + address);
+//                    System.out.println("W: " + weather);
+//
+//                    if (weather != null) {
+//                        address.addWeather(weather.getWeatherList());
+//                    }
+//                    return address;
+//                })
+//                .toStream()
+//                .to("aw", Produced.with(stringSerde, addressSerde));
 
         final Topology topology = builder.build();
         final KafkaStreams streams = new KafkaStreams(topology, props);
