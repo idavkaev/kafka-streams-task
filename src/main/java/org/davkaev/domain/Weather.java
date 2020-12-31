@@ -9,6 +9,11 @@ public class Weather {
     private double tmp_c;
     private String date;
 
+    public Weather(double tmp_f, double tmp_c, String date) {
+        this.tmp_f = tmp_f;
+        this.tmp_c = tmp_c;
+        this.date = date;
+    }
 
     public Weather(double tmp_f, double tmp_c) {
         this.tmp_f = tmp_f;

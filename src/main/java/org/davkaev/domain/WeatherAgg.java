@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 public class WeatherAgg {
     List<Weather> weatherList;
+    String date;
 
     public WeatherAgg() {
         this.weatherList = new LinkedList<>();
@@ -16,6 +17,19 @@ public class WeatherAgg {
     public WeatherAgg addWeather(Weather weather) {
         this.weatherList.add(weather);
         return this;
+    }
+
+    public WeatherAgg removeWeather(Weather weather) {
+        this.weatherList.remove(weather);
+        return this;
+    }
+
+    public String getDate() {
+        if (weatherList.isEmpty()) {
+            return null;
+        } else {
+            return weatherList.get(0).getDate();
+        }
     }
 
     public Weather avgTmp(){
