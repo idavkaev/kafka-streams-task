@@ -18,8 +18,8 @@ public class WeatherHotelsApp {
 
     static final StreamsBuilder builder = new StreamsBuilder();
     static final ObjectMapper om = new ObjectMapper();
-    public static final String INPUT_TOPIC_WEATHER = "weather";
-    public static final String INPUT_TOPIC_HOTELS = "hotels";
+    public static final String INPUT_TOPIC_WEATHER = "weather_100";
+    public static final String INPUT_TOPIC_HOTELS = "addresses2";
     public static final String OUTPUT_TOPIC = "hotels-weather";
 
 
@@ -122,9 +122,6 @@ public class WeatherHotelsApp {
     public static KStream<String, Address> getHotelsWithWeather(KStream<String, Address> addressKStream, KTable<String, WeatherAgg> weatherKTable) {
         return addressKStream
                 .leftJoin(weatherKTable, (address, weather) -> {
-                    System.out.println("A: " + address);
-                    System.out.println("W: " + weather);
-
                     if (weather != null) {
                         address.addWeather(weather.getWeatherList());
                     }

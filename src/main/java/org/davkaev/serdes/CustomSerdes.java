@@ -28,8 +28,8 @@ public class CustomSerdes {
     private static <T> Serde<T> getCustomSerde(Class<T> serClass) {
         Map<String, Object> serdeProps = new HashMap<>();
         serdeProps.put("JsonPOJOClass", serClass);
-        final Serializer<T> serializer = new WeatherSerializer<>();
-        final Deserializer<T> deserializer = new WeatherDeserializer<>();
+        final Serializer<T> serializer = new PojoSerializer<>();
+        final Deserializer<T> deserializer = new PojoDeserializer<>();
         serializer.configure(serdeProps, false);
         deserializer.configure(serdeProps, false);
         return Serdes.serdeFrom(serializer, deserializer);
