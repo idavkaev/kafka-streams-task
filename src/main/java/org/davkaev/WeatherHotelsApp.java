@@ -5,8 +5,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.*;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.Joined;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
 import org.davkaev.domain.Address;
 import org.davkaev.domain.Weather;
 import org.davkaev.domain.WeatherAgg;
@@ -18,9 +28,10 @@ public class WeatherHotelsApp {
 
     static final StreamsBuilder builder = new StreamsBuilder();
     static final ObjectMapper om = new ObjectMapper();
-    public static final String INPUT_TOPIC_WEATHER = "weather_100";
+    public static final String INPUT_TOPIC_WEATHER = "weather_01";
     public static final String INPUT_TOPIC_HOTELS = "addresses2";
-    public static final String OUTPUT_TOPIC = "hotels-weather";
+    public static final String OUTPUT_TOPIC = "hotels-weather_fff";
+    public static final String WEATHER_HASH_TOPIC = "weather_hash";
 
 
     public static void main(String[] args) throws Exception {
@@ -35,13 +46,13 @@ public class WeatherHotelsApp {
     public static Topology getStreamingAppTopology(StreamsBuilder builder) {
 
         KStream<String, Weather> weatherStream = getHashDateWeatherStream(
-                        builder.stream(INPUT_TOPIC_WEATHER,
+                builder.stream(INPUT_TOPIC_WEATHER,
                         Consumed.with(Serdes.String(), Serdes.String())));
 
-        weatherStream.to("weather-hash-date", Produced.with(Serdes.String(), CustomSerdes.getWeatherSerde()));
+        weatherStream.to(WEATHER_HASH_TOPIC, Produced.with(Serdes.String(), CustomSerdes.getWeatherSerde()));
 
         KTable<String, WeatherAgg> aggregatedWeatherTable = countAvgTempByDays(
-                builder.stream("weather-hash-date",
+                builder.stream(WEATHER_HASH_TOPIC,
                         Consumed.with(Serdes.String(), CustomSerdes.getWeatherSerde())));
 
         KStream<String, Address> addressStream = getAddressStream(
@@ -78,13 +89,14 @@ public class WeatherHotelsApp {
 
 
     public static KTable<String, WeatherAgg> countAvgTempByDays(KStream<String, Weather> weathers) {
-        return weathers.groupByKey()
+        return weathers
+                .groupByKey()
                 .aggregate(WeatherAgg::new,
                         (key, value, agg) -> {
                             agg.addWeather(value);
                             return agg;
                         },
-                Materialized.with(Serdes.String(), CustomSerdes.getWeatherAggSerde()))
+                        Materialized.with(Serdes.String(), CustomSerdes.getWeatherAggSerde()))
                 .mapValues(w -> {
                     Weather weather = w.avgTmp();
                     weather.setDate(w.getDate());
@@ -121,7 +133,7 @@ public class WeatherHotelsApp {
 
     public static KStream<String, Address> getHotelsWithWeather(KStream<String, Address> addressKStream, KTable<String, WeatherAgg> weatherKTable) {
         return addressKStream
-                .leftJoin(weatherKTable, (address, weather) -> {
+                .join(weatherKTable, (address, weather) -> {
                     if (weather != null) {
                         address.addWeather(weather.getWeatherList());
                     }
